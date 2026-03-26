@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column; /* Para poner el botón debajo */
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #000000;
+            font-family: sans-serif;
+        }
+        #tablero {
+            display: grid;
+            grid-template-columns: repeat(4, 75px);
+            gap: 6px;
+            margin-bottom: 20px;
+        }
+        .celda {
+            width: 75px;
+            height: 75px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.15s ease;
+        }
+        .blanco { background: #A47DAB; } /* Color lila */
+        .negro { background: #FFFF00; }  /* Color amarillo */
+
+        #btn-reiniciar {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        #btn-reiniciar:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+
+<div id="tablero"></div>
+<button id="btn-reiniciar" onclick="reiniciarJuego()">Reiniciar Tablero</button>
+
+<script>
+    const TAMANO = 4;
+    let tablero = [];
+
+    function inicializarJuego() {
+        const datosGuardados = localStorage.getItem("tablero_diag");
+        
+        if (datosGuardados) {
+            tablero = JSON.parse(datosGuardados);
+        } else {
+            // Generar tablero aleatorio desde cero
+            tablero = [];
+            for (let i = 0; i < TAMANO * TAMANO; i++) {
+                tablero.push(Math.random() > 0.5 ? "blanco" : "negro");
+            }
+            // Guardar el estado inicial aleatorio
+            localStorage.setItem("tablero_diag", JSON.stringify(tablero));
+        }
+        render();
+    }
+
+    const contenedor = document.getElementById("tablero");
+
+    function render() {
+        contenedor.innerHTML = "";
+        tablero.forEach((estado, i) => {
+            const div = document.createElement("div");
+            div.className = `celda ${estado}`;
+            div.onclick = () => manejarClick(i);
+            contenedor.appendChild(div);
+        });
+    }
+
+    function manejarClick(i) {
+        const colorViejoCentro = tablero[i];
+        const nuevoColorCentro = colorViejoCentro === "blanco" ? "negro" : "blanco";
+        const colorVecinos = colorViejoCentro; 
+
+        tablero[i] = nuevoColorCentro;
+
+        const fila = Math.floor(i / TAMANO);
+        const col = i % TAMANO;
+
+        const direcciones = [
+            [-1, -1], [-1, 0], [-1, 1], 
+            [0, -1],           [0, 1],  
+            [1, -1],  [1, 0],  [1, 1]   
+        ];
+
+        direcciones.forEach(([df, dc]) => {
+            const nuevaFila = fila + df;
+            const nuevaCol = col + dc;
+            if (nuevaFila >= 0 && nuevaFila < TAMANO && nuevaCol >= 0 && nuevaCol < TAMANO) {
+                const indiceVecino = nuevaFila * TAMANO + nuevaCol;
+                tablero[indiceVecino] = colorVecinos;
+            }
+        });
+
+        localStorage.setItem("tablero_diag", JSON.stringify(tablero));
+        render();
+        setTimeout(verificarVictoria, 150);
+    }
+
+    function reiniciarJuego() {
+        localStorage.removeItem("tablero_diag");
+        location.reload(); // Recarga y genera uno nuevo aleatorio
+    }
+
+    function verificarVictoria() {
+        if (tablero.length > 0 && tablero.every(v => v === tablero[0])) {
+            alert("¡Victoria! Todo el tablero es " + (tablero[0] === "blanco" ? "Lila" : "Amarillo"));
+            reiniciarJuego();
+        }
+    }
+
+    // Arrancar el juego
+    inicializarJuego();
+</script>
+</body>
+</html>
