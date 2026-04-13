@@ -1,4 +1,22 @@
 
+class Projectile {
+    constructor(x, y, angle) {
+        this.x = x;
+        this.y = y;
+        this.speed = 7;
+        this.velocity = {
+            x: Math.cos(angle) * this.speed,
+            y: -Math.sin(angle) * this.speed
+        };
+        this.lifeSpan = 120; 
+    }
+
+    update() {
+        this.x += this.velocity.x;
+        this.y += this.velocity.y;
+        this.lifeSpan--;
+    }
+}
 class ShipModel {
     constructor(canvasWidth, canvasHeight) {
         this.width = canvasWidth;
@@ -6,40 +24,44 @@ class ShipModel {
         this.x = canvasWidth / 2;
         this.y = canvasHeight / 2;
         this.radius = 15;
-        this.angle = 90 / 180 * Math.PI; 
-        this.rotation = 0;               
-        this.thrusting = false;          
-        this.thrust = { x: 0, y: 0 };    
-        this.friction = 0.98;            
+        this.angle = Math.PI / 2;
+        this.rotation = 0;
+        this.thrusting = false;
+        this.thrust = { x: 0, y: 0 };
+        this.friction = 0.98;
+        this.projectiles = []; 
+    }
+
+    shoot() {
+        
+        const pX = this.x + this.radius * Math.cos(this.angle);
+        const pY = this.y - this.radius * Math.sin(this.angle);
+        this.projectiles.push(new Projectile(pX, pY, this.angle));
     }
 
     update() {
-        
         this.angle += this.rotation;
-
-        // 2. Manejar Empuje (Traslación)
         if (this.thrusting) {
             this.thrust.x += 0.15 * Math.cos(this.angle);
             this.thrust.y -= 0.15 * Math.sin(this.angle);
         } else {
-            
             this.thrust.x *= this.friction;
             this.thrust.y *= this.friction;
         }
-
-        
         this.x += this.thrust.x;
         this.y += this.thrust.y;
 
         
-        if (this.x < 0 - this.radius) this.x = this.width + this.radius;
-        else if (this.x > this.width + this.radius) this.x = 0 - this.radius;
+        if (this.x < -this.radius) this.x = this.width + this.radius;
+        else if (this.x > this.width + this.radius) this.x = -this.radius;
+        if (this.y < -this.radius) this.y = this.height + this.radius;
+        else if (this.y > this.height + this.radius) this.y = -this.radius;
+
         
-        if (this.y < 0 - this.radius) this.y = this.height + this.radius;
-        else if (this.y > this.height + this.radius) this.y = 0 - this.radius;
+        this.projectiles.forEach(p => p.update());
+        this.projectiles = this.projectiles.filter(p => p.lifeSpan > 0);
     }
 }
-
 
 class GameView {
     constructor(canvasId) {
@@ -50,6 +72,12 @@ class GameView {
     clear() {
         this.ctx.fillStyle = "black";
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    render(model) {
+        this.clear();
+        this.drawShip(model);
+        this.drawProjectiles(model.projectiles);
     }
 
     drawShip(ship) {
@@ -71,6 +99,15 @@ class GameView {
         this.ctx.closePath();
         this.ctx.stroke();
     }
+
+    drawProjectiles(projectiles) {
+        this.ctx.fillStyle = "red";
+        projectiles.forEach(p => {
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+            this.ctx.fill();
+        });
+    }
 }
 
 
@@ -78,65 +115,43 @@ class GameController {
     constructor() {
         this.view = new GameView("gameCanvas");
         this.model = new ShipModel(this.view.canvas.width, this.view.canvas.height);
-        this.db = new PouchDB('asteroids_logs');
-        
-        this.initEventListeners();
-        this.gameLoop();
+        this.db = new PouchDB('asteroids_game_data');
+        this.initEvents();
+        this.loop();
     }
 
-    initEventListeners() {
-        document.addEventListener("keydown", (e) => this.handleKeys(e, true));
-        document.addEventListener("keyup", (e) => this.handleKeys(e, false));
+    initEvents() {
+        document.addEventListener("keydown", (e) => {
+            if (e.code === "ArrowLeft") this.model.rotation = 0.1;
+            if (e.code === "ArrowRight") this.model.rotation = -0.1;
+            if (e.code === "ArrowUp") this.model.thrusting = true;
+            if (e.code === "Space") {
+                this.model.shoot();
+                this.logToDB("SHOOT");
+            }
+        });
+
+        document.addEventListener("keyup", (e) => {
+            if (e.code === "ArrowLeft" || e.code === "ArrowRight") this.model.rotation = 0;
+            if (e.code === "ArrowUp") this.model.thrusting = false;
+        });
     }
 
-    handleKeys(event, isPressed) {
-        let action = "";
-        switch(event.keyCode) {
-            case 37: 
-                this.model.rotation = isPressed ? 0.1 : 0;
-                action = "ROTATE_LEFT";
-                break;
-            case 38: 
-                this.model.thrusting = isPressed;
-                action = "THRUST";
-                break;
-            case 39: 
-                this.model.rotation = isPressed ? -0.1 : 0;
-                action = "ROTATE_RIGHT";
-                break;
-        }
-        
-        
-        if (isPressed && action !== "") this.logEvent(action);
-    }
-
-    async logEvent(type) {
-        const entry = {
-            _id: new Date().toJSON(),
-            type: type,
-            posX: this.model.x,
-            posY: this.model.y,
-            angle: this.model.angle
+    async logToDB(actionType) {
+        const doc = {
+            _id: "event_" + new Date().getTime(),
+            action: actionType,
+            shipPos: { x: this.model.x, y: this.model.y },
+            timestamp: new Date().toISOString()
         };
-        try {
-            await this.db.put(entry);
-        } catch (err) {
-            console.error("Error en PouchDB:", err);
-        }
+        try { await this.db.put(doc); } catch (err) { console.error(err); }
     }
 
-    gameLoop() {
-        
+    loop() {
         this.model.update();
-
-       
-        this.view.clear();
-        this.view.drawShip(this.model);
-
-        
-        requestAnimationFrame(() => this.gameLoop());
+        this.view.render(this.model);
+        requestAnimationFrame(() => this.loop());
     }
 }
 
-
-const app = new GameController();
+const game = new GameController();
