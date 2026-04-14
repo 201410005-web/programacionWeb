@@ -1,22 +1,58 @@
+/**
+ * --- MODELO: ASTEROIDE ---
+ */
+class Asteroid {
+    constructor(x, y, radius, level) {
+        this.x = x || Math.random() * 800;
+        this.y = y || Math.random() * 600;
+        this.radius = radius || 40;
+        this.level = level || 3; // 3: Grande, 2: Mediano, 1: Pequeño
+        
+        // Velocidad aleatoria
+        this.velX = (Math.random() * 2 - 1) * (4 - this.level);
+        this.velY = (Math.random() * 2 - 1) * (4 - this.level);
+        
+        // Crear forma irregular (vértices aleatorios)
+        this.vertices = Math.floor(Math.random() * 7 + 8);
+        this.offset = [];
+        for (let i = 0; i < this.vertices; i++) {
+            this.offset.push(Math.random() * (this.radius * 0.4) + (this.radius * 0.6));
+        }
+    }
 
+    update(width, height) {
+        this.x += this.velX;
+        this.y += this.velY;
+
+        // Screen wrap para asteroides
+        if (this.x < -this.radius) this.x = width + this.radius;
+        else if (this.x > width + this.radius) this.x = -this.radius;
+        if (this.y < -this.radius) this.y = height + this.radius;
+        else if (this.y > height + this.radius) this.y = -this.radius;
+    }
+}
+
+/**
+ * --- MODELO: PROYECTIL ---
+ */
 class Projectile {
     constructor(x, y, angle) {
         this.x = x;
         this.y = y;
         this.speed = 7;
-        this.velocity = {
-            x: Math.cos(angle) * this.speed,
-            y: -Math.sin(angle) * this.speed
-        };
-        this.lifeSpan = 120; 
+        this.velocity = { x: Math.cos(angle) * this.speed, y: -Math.sin(angle) * this.speed };
+        this.lifeSpan = 60;
     }
-
     update() {
         this.x += this.velocity.x;
         this.y += this.velocity.y;
         this.lifeSpan--;
     }
 }
+
+/**
+ * --- MODELO: NAVE ---
+ */
 class ShipModel {
     constructor(canvasWidth, canvasHeight) {
         this.width = canvasWidth;
@@ -29,17 +65,24 @@ class ShipModel {
         this.thrusting = false;
         this.thrust = { x: 0, y: 0 };
         this.friction = 0.98;
-        this.projectiles = []; 
+        this.projectiles = [];
+        this.asteroids = []; // Nueva lista de asteroides
     }
 
     shoot() {
-        
         const pX = this.x + this.radius * Math.cos(this.angle);
         const pY = this.y - this.radius * Math.sin(this.angle);
         this.projectiles.push(new Projectile(pX, pY, this.angle));
     }
 
+    generateAsteroids(count) {
+        for (let i = 0; i < count; i++) {
+            this.asteroids.push(new Asteroid());
+        }
+    }
+
     update() {
+        // Actualizar Nave
         this.angle += this.rotation;
         if (this.thrusting) {
             this.thrust.x += 0.15 * Math.cos(this.angle);
@@ -51,100 +94,125 @@ class ShipModel {
         this.x += this.thrust.x;
         this.y += this.thrust.y;
 
-        
+        // Wrap Nave
         if (this.x < -this.radius) this.x = this.width + this.radius;
         else if (this.x > this.width + this.radius) this.x = -this.radius;
         if (this.y < -this.radius) this.y = this.height + this.radius;
         else if (this.y > this.height + this.radius) this.y = -this.radius;
 
-        
+        // Actualizar Proyectiles
         this.projectiles.forEach(p => p.update());
         this.projectiles = this.projectiles.filter(p => p.lifeSpan > 0);
+
+        // Actualizar Asteroides
+        this.asteroids.forEach(a => a.update(this.width, this.height));
     }
 }
 
+/**
+ * --- VISTA ---
+ */
 class GameView {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext("2d");
     }
 
-    clear() {
+    render(model) {
         this.ctx.fillStyle = "black";
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    }
-
-    render(model) {
-        this.clear();
+        
         this.drawShip(model);
         this.drawProjectiles(model.projectiles);
+        this.drawAsteroids(model.asteroids);
     }
 
     drawShip(ship) {
         this.ctx.strokeStyle = "white";
         this.ctx.lineWidth = 2;
         this.ctx.beginPath();
-        this.ctx.moveTo(
-            ship.x + ship.radius * Math.cos(ship.angle),
-            ship.y - ship.radius * Math.sin(ship.angle)
-        );
-        this.ctx.lineTo(
-            ship.x - ship.radius * (Math.cos(ship.angle) + Math.sin(ship.angle)),
-            ship.y + ship.radius * (Math.sin(ship.angle) - Math.cos(ship.angle))
-        );
-        this.ctx.lineTo(
-            ship.x - ship.radius * (Math.cos(ship.angle) - Math.sin(ship.angle)),
-            ship.y + ship.radius * (Math.sin(ship.angle) + Math.cos(ship.angle))
-        );
+        //this.ctx.arc(ship.x, ship.y, ship.radius, 0, Math.PI * 2); // Guía de colisión (opcional)
+        this.ctx.stroke();
+
+        this.ctx.beginPath(); // Cuerpo nave
+        this.ctx.moveTo(ship.x + ship.radius * Math.cos(ship.angle), ship.y - ship.radius * Math.sin(ship.angle));
+        this.ctx.lineTo(ship.x - ship.radius * (Math.cos(ship.angle) + Math.sin(ship.angle)), ship.y + ship.radius * (Math.sin(ship.angle) - Math.cos(ship.angle)));
+        this.ctx.lineTo(ship.x - ship.radius * (Math.cos(ship.angle) - Math.sin(ship.angle)), ship.y + ship.radius * (Math.sin(ship.angle) + Math.cos(ship.angle)));
         this.ctx.closePath();
         this.ctx.stroke();
     }
 
     drawProjectiles(projectiles) {
-        this.ctx.fillStyle = "red";
+        this.ctx.fillStyle = "#FF4444";
         projectiles.forEach(p => {
             this.ctx.beginPath();
             this.ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
             this.ctx.fill();
         });
     }
+
+    drawAsteroids(asteroids) {
+        this.ctx.strokeStyle = "#AAAAAA";
+        this.ctx.lineWidth = 1.5;
+        asteroids.forEach(a => {
+            this.ctx.beginPath();
+            for (let i = 0; i < a.vertices; i++) {
+                const angle = i * (Math.PI * 2) / a.vertices;
+                const r = a.offset[i];
+                const x = a.x + r * Math.cos(angle);
+                const y = a.y + r * Math.sin(angle);
+                if (i === 0) this.ctx.moveTo(x, y);
+                else this.ctx.lineTo(x, y);
+            }
+            this.ctx.closePath();
+            this.ctx.stroke();
+        });
+    }
 }
 
-
+/**
+ * --- CONTROLADOR ---
+ */
 class GameController {
     constructor() {
         this.view = new GameView("gameCanvas");
         this.model = new ShipModel(this.view.canvas.width, this.view.canvas.height);
         this.db = new PouchDB('asteroids_game_data');
+        
+        this.init();
+    }
+
+    async init() {
         this.initEvents();
+        this.model.generateAsteroids(5); // Crear 5 asteroides iniciales
+        await this.logEvent("GAME_START", { asteroidCount: 5 });
         this.loop();
     }
 
     initEvents() {
         document.addEventListener("keydown", (e) => {
-            if (e.code === "ArrowLeft") this.model.rotation = 0.1;
-            if (e.code === "ArrowRight") this.model.rotation = -0.1;
+            if (e.code === "ArrowLeft") this.model.rotation = 0.08;
+            if (e.code === "ArrowRight") this.model.rotation = -0.08;
             if (e.code === "ArrowUp") this.model.thrusting = true;
             if (e.code === "Space") {
                 this.model.shoot();
-                this.logToDB("SHOOT");
+                this.logEvent("SHOOT", { x: this.model.x, y: this.model.y });
             }
         });
-
         document.addEventListener("keyup", (e) => {
             if (e.code === "ArrowLeft" || e.code === "ArrowRight") this.model.rotation = 0;
             if (e.code === "ArrowUp") this.model.thrusting = false;
         });
     }
 
-    async logToDB(actionType) {
+    async logEvent(type, detail) {
         const doc = {
-            _id: "event_" + new Date().getTime(),
-            action: actionType,
-            shipPos: { x: this.model.x, y: this.model.y },
+            _id: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+            type: type,
+            detail: detail,
             timestamp: new Date().toISOString()
         };
-        try { await this.db.put(doc); } catch (err) { console.error(err); }
+        try { await this.db.put(doc); } catch (e) { console.error(e); }
     }
 
     loop() {
