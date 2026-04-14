@@ -1,6 +1,4 @@
-/**
- * --- MODELO: ASTEROIDE ---
- */
+
 class Asteroid {
     constructor(x, y, radius, level) {
         this.x = x || Math.random() * 800;
@@ -8,12 +6,11 @@ class Asteroid {
         this.radius = radius || 40;
         this.level = level || 3; // 3: Grande, 2: Mediano, 1: Pequeño
         
-        // Velocidad aleatoria
+        
         this.velX = (Math.random() * 2 - 1) * (4 - this.level);
         this.velY = (Math.random() * 2 - 1) * (4 - this.level);
         
-        // Crear forma irregular (vértices aleatorios)
-        this.vertices = Math.floor(Math.random() * 7 + 8);
+                this.vertices = Math.floor(Math.random() * 7 + 8);
         this.offset = [];
         for (let i = 0; i < this.vertices; i++) {
             this.offset.push(Math.random() * (this.radius * 0.4) + (this.radius * 0.6));
@@ -24,7 +21,7 @@ class Asteroid {
         this.x += this.velX;
         this.y += this.velY;
 
-        // Screen wrap para asteroides
+       
         if (this.x < -this.radius) this.x = width + this.radius;
         else if (this.x > width + this.radius) this.x = -this.radius;
         if (this.y < -this.radius) this.y = height + this.radius;
@@ -32,9 +29,7 @@ class Asteroid {
     }
 }
 
-/**
- * --- MODELO: PROYECTIL ---
- */
+
 class Projectile {
     constructor(x, y, angle) {
         this.x = x;
@@ -50,9 +45,7 @@ class Projectile {
     }
 }
 
-/**
- * --- MODELO: NAVE ---
- */
+
 class ShipModel {
     constructor(canvasWidth, canvasHeight) {
         this.width = canvasWidth;
@@ -66,7 +59,7 @@ class ShipModel {
         this.thrust = { x: 0, y: 0 };
         this.friction = 0.98;
         this.projectiles = [];
-        this.asteroids = []; // Nueva lista de asteroides
+        this.asteroids = []; 
     }
 
     shoot() {
@@ -82,7 +75,7 @@ class ShipModel {
     }
 
     update() {
-        // Actualizar Nave
+        
         this.angle += this.rotation;
         if (this.thrusting) {
             this.thrust.x += 0.15 * Math.cos(this.angle);
@@ -94,24 +87,22 @@ class ShipModel {
         this.x += this.thrust.x;
         this.y += this.thrust.y;
 
-        // Wrap Nave
+      
         if (this.x < -this.radius) this.x = this.width + this.radius;
         else if (this.x > this.width + this.radius) this.x = -this.radius;
         if (this.y < -this.radius) this.y = this.height + this.radius;
         else if (this.y > this.height + this.radius) this.y = -this.radius;
 
-        // Actualizar Proyectiles
+       
         this.projectiles.forEach(p => p.update());
         this.projectiles = this.projectiles.filter(p => p.lifeSpan > 0);
 
-        // Actualizar Asteroides
+        
         this.asteroids.forEach(a => a.update(this.width, this.height));
     }
 }
 
-/**
- * --- VISTA ---
- */
+
 class GameView {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
@@ -170,9 +161,7 @@ class GameView {
     }
 }
 
-/**
- * --- CONTROLADOR ---
- */
+
 class GameController {
     constructor() {
         this.view = new GameView("gameCanvas");
@@ -184,7 +173,7 @@ class GameController {
 
     async init() {
         this.initEvents();
-        this.model.generateAsteroids(5); // Crear 5 asteroides iniciales
+        this.model.generateAsteroids(5); 
         await this.logEvent("GAME_START", { asteroidCount: 5 });
         this.loop();
     }
