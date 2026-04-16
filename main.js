@@ -1,26 +1,59 @@
 
 class Asteroid {
-    constructor(x, y, radius) {
-        this.x = x || Math.random() * 800;
-        this.y = y || Math.random() * 600;
+    constructor(x, y, radius, forceOutside = false) {
+        this.canvasW = 800;
+        this.canvasH = 600;
+        
+        
+        if (forceOutside) {
+            
+            if (Math.random() < 0.5) {
+                this.x = Math.random() < 0.5 ? -radius : this.canvasW + radius;
+                this.y = Math.random() * this.canvasH;
+            } else {
+                this.x = Math.random() * this.canvasW;
+                this.y = Math.random() < 0.5 ? -radius : this.canvasH + radius;
+            }
+        } else {
+            
+            this.x = x || Math.random() * this.canvasW;
+            this.y = y || Math.random() * this.canvasH;
+        }
+
         this.radius = radius || 40;
-        this.velX = (Math.random() * 2 - 1) * 2;
-        this.velY = (Math.random() * 2 - 1) * 2;
+        
+        
+        this.velX = (Math.random() * 2 - 1) * 1.5;
+        this.velY = (Math.random() * 2 - 1) * 1.5;
+        
+        
+        if (forceOutside) {
+            if (this.x < 0) this.velX = Math.abs(this.velX);
+            if (this.x > this.canvasW) this.velX = -Math.abs(this.velX);
+            if (this.y < 0) this.velY = Math.abs(this.velY);
+            if (this.y > this.canvasH) this.velY = -Math.abs(this.velY);
+        }
+
+        
         this.vertices = Math.floor(Math.random() * 7 + 8);
         this.offset = [];
         for (let i = 0; i < this.vertices; i++) {
             this.offset.push(Math.random() * (this.radius * 0.4) + (this.radius * 0.6));
         }
     }
+
     update(w, h) {
         this.x += this.velX;
         this.y += this.velY;
+        
+        
         if (this.x < -this.radius) this.x = w + this.radius;
         else if (this.x > w + this.radius) this.x = -this.radius;
         if (this.y < -this.radius) this.y = h + this.radius;
         else if (this.y > h + this.radius) this.y = -this.radius;
     }
 }
+
 
 class Projectile {
     constructor(x, y, angle) {
@@ -32,7 +65,7 @@ class Projectile {
             x: Math.cos(angle) * this.speed, 
             y: -Math.sin(angle) * this.speed 
         };
-        this.lifeSpan = 60;
+        this.lifeSpan = 60; 
     }
     update() {
         this.x += this.velocity.x;
@@ -56,7 +89,9 @@ class ShipModel {
         this.asteroids = [];
         this.projectiles = [];
         this.resetShip();
-        this.spawnAsteroids(6);
+        
+        
+        this.spawnAsteroids(8, true); 
     }
 
     resetShip() {
@@ -68,12 +103,24 @@ class ShipModel {
         this.thrusting = false;
         this.thrust = { x: 0, y: 0 };
         this.friction = 0.98;
-        this.invulnerableTime = 120; 
+        
+        
     }
 
-    spawnAsteroids(count) {
+    
+    spawnAsteroids(count, forceOutside = false) {
         for (let i = 0; i < count; i++) {
-            this.asteroids.push(new Asteroid());
+            
+            if (!forceOutside) {
+                let astX, astY;
+                do {
+                    astX = Math.random() * this.canvasW;
+                    astY = Math.random() * this.canvasH;
+                } while (Math.hypot(astX - this.x, astY - this.y) < 150);
+                this.asteroids.push(new Asteroid(astX, astY, 40, false));
+            } else {
+                this.asteroids.push(new Asteroid(0, 0, 40, true));
+            }
         }
     }
 
@@ -99,18 +146,49 @@ class ShipModel {
         this.x += this.thrust.x;
         this.y += this.thrust.y;
 
-        // Screen Wrap
+        
         if (this.x < -this.radius) this.x = this.canvasW + this.radius;
         else if (this.x > this.canvasW + this.radius) this.x = -this.radius;
         if (this.y < -this.radius) this.y = this.canvasH + this.radius;
         else if (this.y > this.canvasH + this.radius) this.y = -this.radius;
 
-        if (this.invulnerableTime > 0) this.invulnerableTime--;
-
-        // Actualizar listas de objetos
+        
         this.projectiles.forEach(p => p.update());
         this.projectiles = this.projectiles.filter(p => p.lifeSpan > 0);
         this.asteroids.forEach(a => a.update(this.canvasW, this.canvasH));
+        
+        
+        if (this.asteroids.length < 4) {
+            this.spawnAsteroids(2, true); 
+        }
+    }
+}
+
+
+class Starfield {
+    constructor(w, h, count) {
+        this.stars = [];
+        for(let i=0; i<count; i++) {
+            this.stars.push({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                size: Math.random() * 2,
+                opacity: Math.random() * 0.7 + 0.3
+            });
+        }
+    }
+    
+    draw(ctx) {
+        ctx.fillStyle = "black";
+        ctx.fillRect(0,0,800,600);
+        
+        this.stars.forEach(s => {
+            // Color Rosado Pastel: rgba(255, 182, 193, alpha)
+            ctx.fillStyle = `rgba(255, 182, 193, ${s.opacity})`; 
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
     }
 }
 
@@ -119,11 +197,13 @@ class GameView {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext("2d");
+        
+        this.starfield = new Starfield(this.canvas.width, this.canvas.height, 100);
     }
 
     render(model) {
-        this.ctx.fillStyle = "black";
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        this.starfield.draw(this.ctx);
 
         if (!model.gameOver) {
             this.drawShip(model);
@@ -137,15 +217,15 @@ class GameView {
     }
 
     drawUI(score, lives) {
-        this.ctx.fillStyle = "white";
+        // UI en Rosado Pastel para combinar
+        this.ctx.fillStyle = "rgba(255, 182, 193, 0.9)"; 
         this.ctx.font = "20px Courier New";
         this.ctx.fillText(`SCORE: ${score}`, 20, 30);
         this.ctx.fillText(`LIVES: ${lives}`, 20, 60);
     }
 
     drawShip(ship) {
-        if (ship.invulnerableTime % 10 > 5) return; // Efecto parpadeo
-
+        
         this.ctx.strokeStyle = "white";
         this.ctx.lineWidth = 2;
         this.ctx.beginPath();
@@ -157,7 +237,8 @@ class GameView {
     }
 
     drawProjectiles(projectiles) {
-        this.ctx.fillStyle = "yellow";
+        // Disparos Rojos solicitados
+        this.ctx.fillStyle = "#FF0000"; 
         projectiles.forEach(p => {
             this.ctx.beginPath();
             this.ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
@@ -166,7 +247,8 @@ class GameView {
     }
 
     drawAsteroids(asteroids) {
-        this.ctx.strokeStyle = "white";
+        // Color gris claro para asteroides
+        this.ctx.strokeStyle = "#CCCCCC";
         this.ctx.lineWidth = 1.5;
         asteroids.forEach(a => {
             this.ctx.beginPath();
@@ -186,7 +268,7 @@ class GameView {
         this.ctx.fillText("GAME OVER", this.canvas.width/2, this.canvas.height/2);
         this.ctx.font = "20px Courier New";
         this.ctx.fillText("Press 'R' to Restart", this.canvas.width/2, this.canvas.height/2 + 40);
-        this.ctx.textAlign = "left";
+        this.ctx.textAlign = "left"; // Reset para UI
     }
 }
 
@@ -195,7 +277,7 @@ class GameController {
     constructor() {
         this.view = new GameView("gameCanvas");
         this.model = new ShipModel(this.view.canvas.width, this.view.canvas.height);
-        this.db = new PouchDB('asteroids_pouch_db');
+        this.db = new PouchDB('asteroids_stats_db');
         this.init();
     }
 
@@ -211,7 +293,7 @@ class GameController {
                 case "ArrowRight": this.model.rotation = -0.1; break;
                 case "ArrowUp":    this.model.thrusting = true; break;
                 case "Space":      
-                    e.preventDefault(); 
+                    e.preventDefault(); // Evitar scroll
                     this.model.shoot(); 
                     this.logToDB("SHOT_FIRED");
                     break;
@@ -235,38 +317,41 @@ class GameController {
     handleCollisions() {
         if (this.model.gameOver) return;
 
-        //Balas vs Asteroides
-        for (let i = this.model.projectiles.length - 1; i >= 0; i--) {
-            for (let j = this.model.asteroids.length - 1; j >= 0; j--) {
-                let p = this.model.projectiles[i];
-                let a = this.model.asteroids[j];
+        const { projectiles, asteroids } = this.model;
+
+        
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            for (let j = asteroids.length - 1; j >= 0; j--) {
+                let p = projectiles[i];
+                let a = asteroids[j];
+                // Detección por radio (distancia euclidiana)
                 if (Math.hypot(p.x - a.x, p.y - a.y) < a.radius) {
                     this.model.score += 100;
-                    this.model.projectiles.splice(i, 1);
-                    this.model.asteroids.splice(j, 1);
+                    projectiles.splice(i, 1);
+                    asteroids.splice(j, 1);
+                    
                     break;
                 }
             }
         }
 
-        //Nave vs Asteroides
-        if (this.model.invulnerableTime <= 0) {
-            for (let a of this.model.asteroids) {
-                if (Math.hypot(this.model.x - a.x, this.model.y - a.y) < this.model.radius + a.radius) {
-                    this.model.lives--;
-                    if (this.model.lives <= 0) {
-                        this.model.gameOver = true;
-                        this.logToDB("GAME_OVER_FINAL");
-                    } else {
-                        this.model.resetShip();
-                        this.logToDB("LIFE_LOST");
-                    }
-                    break;
+        
+        
+        for (let a of asteroids) {
+            let dist = Math.hypot(this.model.x - a.x, this.model.y - a.y);
+            
+            if (dist < this.model.radius + a.radius) {
+                this.model.lives--;
+                if (this.model.lives <= 0) {
+                    this.model.gameOver = true;
+                    this.logToDB("GAME_OVER_FINAL");
+                } else {
+                    this.model.resetShip(); 
+                    this.logToDB("LIFE_LOST");
                 }
+                break; 
             }
         }
-
-        if (this.model.asteroids.length === 0) this.model.spawnAsteroids(6);
     }
 
     loop() {
@@ -277,5 +362,5 @@ class GameController {
     }
 }
 
-// Arrancar el juego
+
 new GameController();
