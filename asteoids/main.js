@@ -1,16 +1,12 @@
 
 class Asteroid {
-    constructor(x, y, radius, level) {
+    constructor(x, y, radius) {
         this.x = x || Math.random() * 800;
         this.y = y || Math.random() * 600;
         this.radius = radius || 40;
-        this.level = level || 3; // 3: Grande, 2: Mediano, 1: Pequeño
-        
-        
-        this.velX = (Math.random() * 2 - 1) * (4 - this.level);
-        this.velY = (Math.random() * 2 - 1) * (4 - this.level);
-        
-                this.vertices = Math.floor(Math.random() * 7 + 8);
+        this.velX = (Math.random() * 2 - 1) * 2;
+        this.velY = (Math.random() * 2 - 1) * 2;
+        this.vertices = Math.floor(Math.random() * 7 + 8);
         this.offset = [];
         for (let i = 0; i < this.vertices; i++) {
             this.offset.push(Math.random() * (this.radius * 0.4) + (this.radius * 0.6));
@@ -20,8 +16,6 @@ class Asteroid {
     update(width, height) {
         this.x += this.velX;
         this.y += this.velY;
-
-       
         if (this.x < -this.radius) this.x = width + this.radius;
         else if (this.x > width + this.radius) this.x = -this.radius;
         if (this.y < -this.radius) this.y = height + this.radius;
@@ -34,7 +28,8 @@ class Projectile {
     constructor(x, y, angle) {
         this.x = x;
         this.y = y;
-        this.speed = 7;
+        this.speed = 8;
+        this.radius = 2; // Necesario para colisión
         this.velocity = { x: Math.cos(angle) * this.speed, y: -Math.sin(angle) * this.speed };
         this.lifeSpan = 60;
     }
@@ -50,16 +45,20 @@ class ShipModel {
     constructor(canvasWidth, canvasHeight) {
         this.width = canvasWidth;
         this.height = canvasHeight;
-        this.x = canvasWidth / 2;
-        this.y = canvasHeight / 2;
-        this.radius = 15;
+        this.reset();
+        this.projectiles = [];
+        this.asteroids = [];
+    }
+
+    reset() {
+        this.x = this.width / 2;
+        this.y = this.height / 2;
+        this.radius = 12;
         this.angle = Math.PI / 2;
         this.rotation = 0;
         this.thrusting = false;
         this.thrust = { x: 0, y: 0 };
         this.friction = 0.98;
-        this.projectiles = [];
-        this.asteroids = []; 
     }
 
     shoot() {
@@ -75,7 +74,6 @@ class ShipModel {
     }
 
     update() {
-        
         this.angle += this.rotation;
         if (this.thrusting) {
             this.thrust.x += 0.15 * Math.cos(this.angle);
@@ -87,17 +85,13 @@ class ShipModel {
         this.x += this.thrust.x;
         this.y += this.thrust.y;
 
-      
         if (this.x < -this.radius) this.x = this.width + this.radius;
         else if (this.x > this.width + this.radius) this.x = -this.radius;
         if (this.y < -this.radius) this.y = this.height + this.radius;
         else if (this.y > this.height + this.radius) this.y = -this.radius;
 
-       
         this.projectiles.forEach(p => p.update());
         this.projectiles = this.projectiles.filter(p => p.lifeSpan > 0);
-
-        
         this.asteroids.forEach(a => a.update(this.width, this.height));
     }
 }
@@ -112,7 +106,6 @@ class GameView {
     render(model) {
         this.ctx.fillStyle = "black";
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
         this.drawShip(model);
         this.drawProjectiles(model.projectiles);
         this.drawAsteroids(model.asteroids);
@@ -121,11 +114,7 @@ class GameView {
     drawShip(ship) {
         this.ctx.strokeStyle = "white";
         this.ctx.lineWidth = 2;
-        this.ctx.beginPath();
-        //this.ctx.arc(ship.x, ship.y, ship.radius, 0, Math.PI * 2); // Guía de colisión (opcional)
-        this.ctx.stroke();
-
-        this.ctx.beginPath(); // Cuerpo nave
+        this.ctx.beginPath(); 
         this.ctx.moveTo(ship.x + ship.radius * Math.cos(ship.angle), ship.y - ship.radius * Math.sin(ship.angle));
         this.ctx.lineTo(ship.x - ship.radius * (Math.cos(ship.angle) + Math.sin(ship.angle)), ship.y + ship.radius * (Math.sin(ship.angle) - Math.cos(ship.angle)));
         this.ctx.lineTo(ship.x - ship.radius * (Math.cos(ship.angle) - Math.sin(ship.angle)), ship.y + ship.radius * (Math.sin(ship.angle) + Math.cos(ship.angle)));
@@ -167,14 +156,12 @@ class GameController {
         this.view = new GameView("gameCanvas");
         this.model = new ShipModel(this.view.canvas.width, this.view.canvas.height);
         this.db = new PouchDB('asteroids_game_data');
-        
         this.init();
     }
 
     async init() {
         this.initEvents();
-        this.model.generateAsteroids(5); 
-        await this.logEvent("GAME_START", { asteroidCount: 5 });
+        this.model.generateAsteroids(6);
         this.loop();
     }
 
@@ -183,10 +170,7 @@ class GameController {
             if (e.code === "ArrowLeft") this.model.rotation = 0.08;
             if (e.code === "ArrowRight") this.model.rotation = -0.08;
             if (e.code === "ArrowUp") this.model.thrusting = true;
-            if (e.code === "Space") {
-                this.model.shoot();
-                this.logEvent("SHOOT", { x: this.model.x, y: this.model.y });
-            }
+            if (e.code === "Space") this.model.shoot();
         });
         document.addEventListener("keyup", (e) => {
             if (e.code === "ArrowLeft" || e.code === "ArrowRight") this.model.rotation = 0;
@@ -194,18 +178,44 @@ class GameController {
         });
     }
 
+    // Lógica de detección de colisiones (Círculo vs Círculo)
+    distBetweenPoints(x1, y1, x2, y2) {
+        return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+    }
+
+    handleCollisions() {
+        const { asteroids, projectiles } = this.model;
+
+       //Proyectiles vs Asteroides
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            for (let j = asteroids.length - 1; j >= 0; j--) {
+                if (this.distBetweenPoints(projectiles[i].x, projectiles[i].y, asteroids[j].x, asteroids[j].y) < asteroids[j].radius) {
+                    this.logEvent("COLLISION_BULLET", { asteroid_id: j });
+                    asteroids.splice(j, 1);
+                    projectiles.splice(i, 1);
+                    break;
+                }
+            }
+        }
+
+      
+        for (let i = 0; i < asteroids.length; i++) {
+            if (this.distBetweenPoints(this.model.x, this.model.y, asteroids[i].x, asteroids[i].y) < this.model.radius + asteroids[i].radius) {
+                this.logEvent("COLLISION_SHIP", { pos: { x: this.model.x, y: this.model.y } });
+                this.model.reset(); // Reiniciar nave
+                break;
+            }
+        }
+    }
+
     async logEvent(type, detail) {
-        const doc = {
-            _id: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            type: type,
-            detail: detail,
-            timestamp: new Date().toISOString()
-        };
-        try { await this.db.put(doc); } catch (e) { console.error(e); }
+        const doc = { _id: `col_${Date.now()}`, type, detail, timestamp: new Date().toISOString() };
+        try { await this.db.put(doc); } catch (e) {}
     }
 
     loop() {
         this.model.update();
+        this.handleCollisions(); // Ejecutar motor de colisiones
         this.view.render(this.model);
         requestAnimationFrame(() => this.loop());
     }
